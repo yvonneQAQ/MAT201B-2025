@@ -1,0 +1,10 @@
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/voronoi.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/voronoi3d.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/testing2.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/theredwire.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/Finalproject.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/voronoibreaking.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/voronoibreaking2.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/loadobj.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/edit_cache.dir
+/Users/yifengyuan/Desktop/MAT201B2025/allolib_playground/allolib/examples/MAT201B-2025/assignment1/FinalProject/build/CMakeFiles/rebuild_cache.dir
