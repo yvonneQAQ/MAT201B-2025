@@ -51,7 +51,9 @@ public:
   float harmonicSeriesScale[20];
   float halfStepScale[20];
   float halfStepInterval = 1.05946309; // 2^(1/12)
-  RtMidiIn midiIn;                     // MIDI input carrier
+  RtMidiIn midiIn;    
+  float zoomTime = 0.0f;
+                 // MIDI input carrier
 
   Mesh mSpectrogram;
   vector<float> spectrum;
@@ -70,6 +72,17 @@ struct LightDot {
   float targetBrightness;
   float phase;
 };
+
+struct Raindrop {
+    Vec3f pos;
+    float speed;
+};
+
+std::vector<Raindrop> raindrops;
+float rainSpawnTimer = 0.0f;
+const float rainspawnInterval = 0.01f;
+bool rainActive = false;
+
 
 struct MeteorLine {
   Vec3f start, control, end;
@@ -90,6 +103,8 @@ T clamp(T val, T minVal, T maxVal) {
 
 
 std::vector<LightDot> lightDots;
+
+
 
 
   virtual void onInit() override
@@ -181,9 +196,95 @@ lastMeteorTime = 0.0f;
   }
 
 void onAnimate(double dt) override {
-  navControl().active(navi);
-  time += dt;  // <-- 记得加上这句，累积时间
+    time += dt;
 
+    // Rain logic - completely separate from meteor timing
+    if (time > 102.0f) {  // Start rain after camera zoom
+        if (!rainActive) {
+            rainActive = true;
+            rainSpawnTimer = 0.0f;  // Reset timer when rain first starts
+            std::cout << "Rain started at time: " << time << std::endl;
+        }
+
+        // Spawn new drops at regular intervals
+        rainSpawnTimer += dt;
+        while (rainSpawnTimer >= rainspawnInterval) {
+            rainSpawnTimer -= rainspawnInterval;
+
+            // Add more drops per interval
+            int count = al::rnd::uniformi(5, 10);  // Increased number of drops
+            for (int i = 0; i < count; ++i) {
+                Raindrop r;
+                r.pos = Vec3f(
+                    al::rnd::uniform(-8.0f, 8.0f),    // Wider X spread
+                    al::rnd::uniform(6.0f, 8.0f),     // Start higher
+                    al::rnd::uniform(-12.0f, -8.0f)   // Wider Z spread
+                );
+                r.speed = al::rnd::uniform(3.0f, 6.0f);  // Faster speed
+                raindrops.push_back(r);
+            }
+            std::cout << "Spawned " << count << " raindrops. Total drops: " << raindrops.size() << std::endl;
+        }
+
+        // Update drop positions
+        for (auto& r : raindrops) {
+            r.pos.y -= r.speed * dt;
+        }
+
+        // Remove drops that fall below view
+        raindrops.erase(
+            std::remove_if(raindrops.begin(), raindrops.end(),
+                          [](const Raindrop& r) { return r.pos.y < -6.0f; }),
+            raindrops.end()
+        );
+    }
+
+    // Meteor logic - completely separate
+    if (time >= 62.0f && time - lastMeteorTime >= 2.0f) {
+        lastMeteorTime = time;
+        std::cout << "Meteor launched at time: " << time << std::endl;
+
+        // 发射一个流星线
+        MeteorLine m;
+        float y = al::rnd::uniform(-2.0f, 2.0f);
+        float z = al::rnd::uniform(-2.0f, 2.0f);
+        float direction = (al::rnd::uniform() > 0.5f) ? 1.0f : -1.0f;
+
+        m.start = Vec3f(-6.0f * direction, y, -10);
+        m.end = Vec3f(6.0f * direction, y, -10);
+        // Slightly curve the path in the Z direction or upward
+        Vec3f mid = (m.start + m.end) * 0.5f;
+      
+        m.speed = al::rnd::uniform(1.8f, 3.0f);  // Slower speed
+
+        m.control = Vec3f(
+        0.0f,
+        y + (al::rnd::uniform() > 0.5f) ? 1.0f : -1.0f * al::rnd::uniform(2.0f, 6.0f),  // lift/bend the curve more
+        -10.0f);
+
+        m.brightness = al::rnd::uniform(8.0f, 12.0f);  // Much brighter
+        m.lifetime = 3.0f;  // Longer lifetime
+
+        meteorLines.push_back(m);
+    }
+
+    // Camera zoom logic
+    if (time > 62.0f && time <= 102.0f) {
+        float t = (time - 62.0f) / 40.0f;   // Zoom in over 40 seconds
+        t = std::min(t, 1.0f);             // Clamp to 1.0
+        t = t * t * (3 - 2 * t);           // Smoothstep easing
+        float z = 2.0f + (-20.0f * t);     // 2.0 → -18.0
+        nav().pos(0, 0, z);
+    }
+    else if (time > 102.0f && time <= 142.0f) {  // Zoom out over 40 seconds
+        float t = (time - 102.0f) / 40.0f;  // t goes from 0 to 1
+        t = std::min(t, 1.0f);
+        t = t * t * (3 - 2 * t);  // smoothstep
+        float z = -18.0f + (20.0f * t);  // -18.0 → 2.0
+        nav().pos(0, 0, z);
+    }
+
+  
  for (auto &dot : lightDots) {
   float accel = 1.0f;   // 加速度（用于位置 jitter）
   float phaseMult = 1.0f;  // 闪烁速度倍数
@@ -206,6 +307,7 @@ else {
 
 
 
+
   // Jitter 位置
   dot.pos += Vec3f(
     al::rnd::uniformS(0.005f),
@@ -224,34 +326,6 @@ if (time >= 60.0f && !lightDots.empty()) {
   lightDots.clear();  // 删除所有点
 }
 
-if (time >=62.0f && time - lastMeteorTime >= 2.0f) {
-    lastMeteorTime = time;
-    std::cout << "Meteor launched at time: " << time << std::endl;
-
-
-    // 发射一个流星线
-    MeteorLine m;
-    float y = al::rnd::uniform(-2.0f, 2.0f);
-    float z = al::rnd::uniform(-2.0f, 2.0f);
-    float direction = (al::rnd::uniform() > 0.5f) ? 1.0f : -1.0f;
-
-    m.start = Vec3f(-6.0f * direction, y, -10);
-    m.end = Vec3f(6.0f * direction, y, -10);
-    // Slightly curve the path in the Z direction or upward
-    Vec3f mid = (m.start + m.end) * 0.5f;
-  
-    m.speed = al::rnd::uniform(0.5f, 1.0f);
-   m.control = Vec3f(0.0f, y + al::rnd::uniform(-1.0f, 1.0f), -10.0f); // 中点弯曲
-m.brightness = al::rnd::uniform(0.6f, 1.0f); // 用于亮度和透明度
-
-
-
-;
-    m.lifetime = 2.0f;
-
-    meteorLines.push_back(m);
-}
-
 // update progress
 for (auto &m : meteorLines) {
   m.progress += m.speed * dt;
@@ -263,10 +337,9 @@ meteorLines.erase(std::remove_if(meteorLines.begin(), meteorLines.end(),
   meteorLines.end());
 
 
-
-  imguiBeginFrame();
-  synthManager.drawSynthControlPanel();
-  imguiEndFrame();
+    imguiBeginFrame();
+    synthManager.drawSynthControlPanel();
+    imguiEndFrame();
 }
 
 
@@ -281,102 +354,144 @@ meteorLines.erase(std::remove_if(meteorLines.begin(), meteorLines.end(),
     sphere.primitive(Mesh::TRIANGLES);
     addSphere(sphere, 1.0);
 
-  if (time < 60.0) {
-  for (const auto &dot : lightDots) {
-    g.pushMatrix();
-    g.translate(dot.pos);
-    g.color(dot.brightness, dot.brightness, dot.brightness);
-    g.scale(0.004);
-    g.draw(sphere);
+    if (time < 60.0) {
+      for (const auto &dot : lightDots) {
+        g.pushMatrix();
+        g.translate(dot.pos);
+        g.color(dot.brightness, dot.brightness, dot.brightness);
+        g.scale(0.004);
+        g.draw(sphere);
+        g.popMatrix();
+      }
+    }
     g.popMatrix();
-  }
-}
-    g.popMatrix();
+    
     // 启用透明混合模式
     g.blending(true);
     g.blendAdd();
 
-// 准备一个球体用于流星尾焰
-Mesh stphere;
-stphere.primitive(Mesh::TRIANGLES);
-addSphere(stphere, 1.0f);
+    // Bézier 函数
+    auto bezier = [](const Vec3f &a, const Vec3f &b, const Vec3f &c, float t) -> Vec3f {
+      return (1 - t) * (1 - t) * a + 2 * (1 - t) * t * b + t * t * c;
+    };
 
-// Bézier 函数
-auto bezier = [](const Vec3f &a, const Vec3f &b, const Vec3f &c, float t) -> Vec3f {
-  return (1 - t) * (1 - t) * a + 2 * (1 - t) * t * b + t * t * c;
-};
+    for (auto &m : meteorLines) {
+      float t = m.progress / m.lifetime;
+      if (t >= 1.0f) continue;
 
-for (auto &m : meteorLines) {
-  float t = m.progress / m.lifetime;
-  if (t >= 1.0f) continue;
+      // Calculate camera-relative position
+      float zPos;
+      if (time <= 142.0f) {
+          float t = (time - 102.0f) / 40.0f;  // t goes from 0 to 1
+          t = std::min(t, 1.0f);
+          t = t * t * (3 - 2 * t);  // smoothstep
+          zPos = -18.0f + (20.0f * t);  // -18.0 → 2.0
+      } else {
+          zPos = 2.0f;  // Final camera position
+      }
 
-  // Bézier positions
-  Vec3f pos = bezier(m.start, m.control, m.end, t);
-  Vec3f nextPos = bezier(m.start, m.control, m.end, t + 0.25f);
+      g.pushMatrix();
+      g.translate(0, 0, zPos - 10);  // Match camera position
 
-  // direction and perpendicular vector for quad width
-  Vec3f dir = (nextPos - pos).normalize();
-  float taper = 1.0f - t;  // t 越大，尾部越细
-  Vec3f perp = cross(dir, Vec3f(0, 1, 0)).normalize() * 0.1f * taper;
+      // Set rendering states for maximum brightness
+      g.lighting(false);  // Disable lighting
+      g.depthTesting(false);  // Disable depth testing
+      g.blending(true);
+      g.blendAdd();  // Use additive blending for maximum brightness
 
+      // Draw trail with multiple line segments
+      int segments = 24;  // More segments for smoother line
+      float step = 0.0008f;  // Smaller step for smoother line
 
-  float b = std::min(1.0f, m.brightness * 1.5f);
+      for (int i = 0; i < segments; ++i) {
+        float ti = t - i * step;
+        float tiNext = ti - step;
 
+        if (ti < 0.0f || tiNext < 0.0f) continue;
 
-  // Construct quad (two triangles for gradient line)
-  Mesh quad;
-  quad.primitive(Mesh::TRIANGLES);
+        Vec3f p1 = bezier(m.start, m.control, m.end, ti);
+        Vec3f p2 = bezier(m.start, m.control, m.end, tiNext);
 
-  Vec3f v1 = pos + perp;
-  Vec3f v2 = pos - perp;
-  Vec3f v3 = nextPos - perp;
-  Vec3f v4 = nextPos + perp;
+        // Create a thin line segment
+        Mesh line;
+        line.primitive(Mesh::LINES);
+        
+        float brightness = m.brightness * (1.0f - (float)i / segments);  // Fade out along trail
+        line.color(brightness, brightness, brightness, 1.0f);
+        
+        // Add the line segment
+        line.vertex(p1);
+        line.vertex(p2);
 
-  // Gradient alpha trail
-  quad.color(b, b, b, 1.0f); quad.vertex(v1);
-  quad.color(b, b, b, 1.0f); quad.vertex(v2);
-  quad.color(b, b, b, 0.0f); quad.vertex(v3);
+        g.draw(line);
+      }
 
-  quad.color(b, b, b, 1.0f); quad.vertex(v1);
-  quad.color(b, b, b, 0.0f); quad.vertex(v3);
-  quad.color(b, b, b, 0.0f); quad.vertex(v4);
+      // Restore rendering states
+      g.lighting(true);
+      g.depthTesting(true);
+      g.popMatrix();
+    }
 
-  g.draw(quad);
+    // Draw rain - moved outside meteor loop
+    if (time > 102.0f) {  // Only draw rain after it starts
+        g.pushMatrix();
+        // Calculate z position based on camera zoom
+        float zPos;
+        if (time <= 142.0f) {
+            float t = (time - 102.0f) / 40.0f;  // t goes from 0 to 1
+            t = std::min(t, 1.0f);
+            t = t * t * (3 - 2 * t);  // smoothstep
+            zPos = -18.0f + (20.0f * t);  // -18.0 → 2.0
+        } else {
+            zPos = 2.0f;  // Final camera position
+        }
+        g.translate(0, 0, zPos - 10);  // Position rain relative to camera
+        
+        // Reset and set rendering states for maximum brightness
+        g.lighting(false);  // Disable lighting
+        g.depthTesting(false);  // Disable depth testing
+        g.blending(true);
+        g.blendAdd();  // Use additive blending for maximum brightness
+        
+        Mesh rainMesh;
+        rainMesh.primitive(Mesh::POINTS);
 
-  // Glow sphere at nextPos
-  g.pushMatrix();
-  g.translate(nextPos);
-  g.color(b, b, b, 0.7f);
-  g.scale(0.15);
-  g.draw(sphere);
-  g.popMatrix();
-}
+        for (const auto& r : raindrops) {
+            rainMesh.vertex(r.pos);
+            // Super bright white color with even higher values
+            rainMesh.color(6.0f, 6.0f, 6.0f, 1.0f);
+        }
 
-
-
+        g.pointSize(1.0f);
+        g.draw(rainMesh);
+        
+        // Restore rendering states
+        g.lighting(true);
+        g.depthTesting(true);
+        g.popMatrix();
+    }
 
     // Render the synth's graphics
     synthManager.render(g);
-    // // Draw Spectrum
-    mSpectrogram.reset();
-    mSpectrogram.primitive(Mesh::LINE_STRIP);
-    if (showSpectro)
-    {
-      for (int i = 0; i < FFT_SIZE / 2; i++)
-      {
-        mSpectrogram.color(HSV(0.5 - spectrum[i] * 100));
-        mSpectrogram.vertex(i/2, spectrum[i]/20, 6.0);
-      }
+    
+    // Draw Spectrum
+    //mSpectrogram.reset();
+    //mSpectrogram.primitive(Mesh::LINE_STRIP);
+    //if (showSpectro) {
+      //for (int i = 0; i < FFT_SIZE / 2; i++) {
+        //mSpectrogram.color(HSV(0.5 - spectrum[i] * 100));
+        //mSpectrogram.vertex(i/2, spectrum[i]/20, 6.0);
+      //}
       g.meshColor(); // Use the color in the mesh
       g.pushMatrix();
       g.translate(-3.0, -3, -10);
       g.scale(10.0 / FFT_SIZE, 1000, 1.0);
-      g.draw(mSpectrogram); g.translate(0, 0, -10);
+      g.draw(mSpectrogram);
       g.popMatrix();
-    }
+    
+    
     // GUI is drawn here
-    if (showGUI)
-    {
+    if (showGUI) {
       imguiDraw();
     }
   }
